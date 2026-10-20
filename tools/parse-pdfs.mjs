@@ -4,9 +4,9 @@
 // Usage: npm run build:data
 //
 // PDF file name must start with the category number: "1.-anything.pdf".
-// Answer key format (one line per question, letters a–e, several allowed):
-//   1. ad
-//   2. b
+// Answer key format (one line per question, exactly one letter a–e):
+//   1. a
+//   2. d
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -143,7 +143,8 @@ for (const lang of fs.readdirSync(SRC).filter((d) => d !== 'answers')) {
     let answered = 0;
     for (const q of questions) {
       const a = answers?.[q.n];
-      if (a?.length) {
+      if (a?.length > 1) console.warn(`  [${id}.txt] question ${q.n}: only one answer allowed, got "${a.join('')}"`);
+      if (a?.length === 1) {
         q.correct = a;
         answered++;
       }

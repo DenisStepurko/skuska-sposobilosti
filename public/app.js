@@ -26,7 +26,7 @@ const I18N = {
     correct: 'Правильно',
     wrong: 'Неправильно',
     correctIs: (l) => `Правильна відповідь: ${l}`,
-    multiHint: 'Може бути кілька правильних відповідей.',
+    answeredCount: (n, total) => `Відповіли: ${n} з ${total}`,
     noKey: 'Відповідь для цього питання ще не додана.',
     modeCheck: 'Самоперевірка',
     modeRead: 'Читання',
@@ -253,8 +253,6 @@ function renderStudy() {
     } else if (study.revealed && !readMode) {
       const ok = sameSet(study.selected, q.correct);
       feedback = `<div class="verdict ${ok ? 'ok' : 'bad'}">${ok ? t('correct') : t('wrong')} · ${t('correctIs', q.correct.join(', '))}</div>`;
-    } else if (!readMode) {
-      feedback = `<div class="hint">${t('multiHint')}</div>`;
     }
     body = `
       <div class="qnum">№ ${q.n}</div>
@@ -351,7 +349,7 @@ async function renderTestRun() {
     `<div class="qnum">${esc(cat.title)} · № ${q.n}</div>
      <p class="qtext">${esc(q.text)}</p>
      ${optionsHtml(q, { selected: item.a })}
-     <div class="hint">${t('multiHint')} ${answered} / ${test.items.length}</div>
+     <div class="hint">${t('answeredCount', answered, test.items.length)}</div>
      <div class="grid">${test.items.map((x, k) =>
        `<button data-jump="${k}" class="${x.a.length ? 'done' : ''} ${k === test.i ? 'cur' : ''}">${k + 1}</button>`).join('')}</div>` +
     bottombar(`
@@ -460,7 +458,7 @@ app.addEventListener('click', async (e) => {
   // study
   if (route.startsWith('#/study/')) {
     if (opt && !study.revealed && store.studyMode !== 'read') {
-      study.selected = study.selected.includes(opt) ? study.selected.filter((x) => x !== opt) : [...study.selected, opt];
+      study.selected = [opt];
       return renderStudy();
     }
     if (act === 'scheck') {
@@ -482,7 +480,7 @@ app.addEventListener('click', async (e) => {
     const test = store.test;
     if (opt) {
       const item = test.items[test.i];
-      item.a = item.a.includes(opt) ? item.a.filter((x) => x !== opt) : [...item.a, opt].sort();
+      item.a = [opt];
       save();
       return renderTestRun();
     }

@@ -36,7 +36,7 @@ There can be several correct letters:
 3. a, c, e
 ```
 
-The current keys for all 8 categories are **unofficial**: they were picked by AI and may contain mistakes.
+The current keys for all 8 categories are **unofficial**: they may contain mistakes.
 If you find an error, fix the letter in the relevant file and run `npm run build:data`.
 
 Letters are counted by option position (1st = a, 2nd = b …), even if the PDF has

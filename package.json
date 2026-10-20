@@ -1,0 +1,15 @@
+{
+  "name": "medtests",
+  "version": "1.0.0",
+  "description": "PWA для підготовки до медичного іспиту",
+  "scripts": {
+    "build:data": "node tools/parse-pdfs.mjs",
+    "icons": "node tools/make-icons.mjs",
+    "start": "node tools/serve.mjs"
+  },
+  "type": "module",
+  "devDependencies": {
+    "pdfjs-dist": "4.10.38"
+  },
+  "private": true
+}

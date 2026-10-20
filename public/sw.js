@@ -1,6 +1,6 @@
 // Stale-while-revalidate: the app works offline, and new questions/answers
 // show up on the next launch after they are deployed.
-const CACHE = 'medtests-v4';
+const CACHE = 'medtests-v5';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'data/index.json', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {

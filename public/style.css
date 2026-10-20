@@ -164,3 +164,29 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .04em; color: v
 #clock { font-variant-numeric: tabular-nums; }
 #clock.urgent { color: var(--bad); font-weight: 700; }
 .row .title .verdict { display: inline; margin: 0; }
+
+.linkbtn { border: 0; background: none; padding: 0; color: var(--sel); cursor: pointer; font-size: 14px; text-decoration: underline; }
+.linkbtn.report { display: block; margin-top: 14px; color: var(--muted); }
+.sheet {
+  position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.45);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.sheet[hidden] { display: none; }
+.sheet-card {
+  background: var(--bg); width: 100%; max-width: 720px; max-height: 92vh; overflow-y: auto;
+  border-radius: 18px 18px 0 0; padding: 18px 16px calc(16px + env(safe-area-inset-bottom));
+}
+.sheet-card h3 { font-size: 16px; margin: 0 0 10px; }
+.sheet-card .qtext { font-size: 15px; font-weight: 500; }
+.sheet-card .opt input { position: absolute; opacity: 0; pointer-events: none; }
+.sheet-card textarea, .sheet-card input[name=name] {
+  width: 100%; margin-top: 12px; padding: 12px; border-radius: 12px; border: 0; font: inherit;
+  background: var(--card); color: var(--text); box-shadow: 0 0 0 1px var(--line) inset; resize: vertical;
+}
+.sheet-actions { display: flex; gap: 8px; margin-top: 14px; }
+.toast {
+  position: fixed; left: 16px; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 30;
+  max-width: 560px; margin: 0 auto; padding: 12px 14px; border-radius: 12px;
+  background: var(--text); color: var(--bg); font-size: 14px; box-shadow: 0 6px 20px rgba(0,0,0,.2);
+}
+.sheet-card .opt { position: relative; }

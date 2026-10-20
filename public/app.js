@@ -4,6 +4,8 @@ const TEST_SIZE = 60;
 const TEST_MINUTES = 180;
 const PASS_PERCENT = 80;
 const STORE_KEY = 'medtests:v1';
+// Cloudflare Worker that collects answer corrections (see worker/). Empty = corrections stay on the device.
+const FEEDBACK_URL = '';
 
 const I18N = {
   uk: {
@@ -62,12 +64,26 @@ const I18N = {
     passRule: (p) => `Прохідний бал — ${p}%`,
     testRules: (n, m, p) => `${n} питань, ${m} хвилин, прохідний бал ${p}%. Коли час вийде, тест завершиться автоматично.`,
     loadError: 'Не вдалося завантажити питання. Перевірте з’єднання з інтернетом.',
+    report: 'Повідомити про помилку у відповіді',
+    reportTitle: 'Яка відповідь правильна?',
+    reportComment: 'Коментар (необов’язково): чому, звідки ця відповідь',
+    reportName: 'Ваше ім’я (необов’язково)',
+    send: 'Надіслати',
+    cancel: 'Скасувати',
+    reportThanks: 'Дякуємо! Правку надіслано на перевірку, а у вас вона вже діє.',
+    reportQueued: 'Немає з’єднання — правку надішлемо пізніше. У вас вона вже діє.',
+    reportLocal: 'Правку збережено на цьому пристрої.',
+    myFix: (mine, official) => `Ваша правка: ${mine} (офіційно: ${official})`,
+    undoFix: 'Скасувати',
   },
 };
 
 /* ---------- state ---------- */
 
 const store = loadStore();
+store.overrides ||= {}; // "cat:n" -> letter the user believes is correct
+store.outbox ||= []; // corrections not yet delivered to FEEDBACK_URL
+store.clientId ||= Math.random().toString(36).slice(2) + Date.now().toString(36);
 let lang = store.lang || 'uk';
 let index = null;
 const cache = {}; // "lang:catId" -> category data
@@ -102,7 +118,26 @@ async function fetchJSON(url) {
 }
 async function loadCategory(id) {
   const key = `${lang}:${id}`;
-  return (cache[key] ||= await fetchJSON(`data/${lang}/${id}.json`));
+  return withOverrides(cache[key] ||= await fetchJSON(`data/${lang}/${id}.json`));
+}
+
+// The user's own corrections replace the official answer on this device
+// until the official key catches up (then the correction is dropped).
+function withOverrides(cat) {
+  let changed = false;
+  const questions = cat.questions.map((q) => {
+    const k = statKey(cat.id, q.n);
+    const mine = store.overrides[k];
+    if (!mine) return q;
+    if (q.correct?.[0] === mine) {
+      delete store.overrides[k];
+      changed = true;
+      return q;
+    }
+    return { ...q, correct: [mine], official: q.correct || [], mine: true };
+  });
+  if (changed) save();
+  return { ...cat, questions };
 }
 const categories = () => index.languages[lang]?.categories || [];
 const hasKey = (q) => Array.isArray(q.correct) && q.correct.length > 0;
@@ -142,6 +177,13 @@ function optionsHtml(q, { selected = [], reveal = false, disabled = false }) {
     return `<button class="opt ${cls}" data-opt="${o.id}" ${disabled ? 'disabled' : ''}>
       <span class="letter">${o.id}</span><span>${esc(o.text)}</span></button>`;
   }).join('')}</div>`;
+}
+
+function fixHtml(catId, q) {
+  const mine = q.mine
+    ? `<div class="hint">✎ ${t('myFix', q.correct[0], q.official.join(', ') || '—')} · <button class="linkbtn" data-undo="${catId}:${q.n}">${t('undoFix')}</button></div>`
+    : '';
+  return `${mine}<button class="linkbtn report" data-report="${catId}:${q.n}">⚑ ${t('report')}</button>`;
 }
 
 function bottombar(html) {
@@ -258,7 +300,8 @@ function renderStudy() {
       <div class="qnum">№ ${q.n}</div>
       <p class="qtext">${esc(q.text)}</p>
       ${optionsHtml(q, { selected: study.selected, reveal, disabled: reveal })}
-      ${feedback}`;
+      ${feedback}
+      ${reveal && hasKey(q) ? fixHtml(study.catId, q) : ''}`;
   }
 
   const canCheck = q && hasKey(q) && !readMode && !study.revealed;
@@ -407,6 +450,7 @@ async function renderTestResult() {
       <p class="qtext">${esc(q.text)}</p>
       ${optionsHtml(q, { selected: item.a, reveal: true, disabled: true })}
       <div class="verdict ${item.ok ? 'ok' : 'bad'}">${item.ok ? t('correct') : `${t('yourAnswer')}: ${item.a.join(', ') || t('noAnswer')} · ${t('correctIs', q.correct.join(', '))}`}</div>
+      ${fixHtml(item.c, q)}
     </div>`);
   }
   app.innerHTML =
@@ -437,6 +481,12 @@ app.addEventListener('click', async (e) => {
   if (act === 'back' && route.startsWith('#/test/run')) {
     if (confirm(t('confirmLeave'))) go('#/');
     return;
+  }
+  if (el.dataset.report) return openReport(...el.dataset.report.split(':'));
+  if (el.dataset.undo) {
+    delete store.overrides[el.dataset.undo];
+    save();
+    return render();
   }
   if (act === 'back') return go(href);
   if (href) return go(href);
@@ -530,6 +580,110 @@ async function render() {
 
 window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
 
+/* ---------- answer corrections ---------- */
+
+const sheet = document.createElement('div');
+sheet.className = 'sheet';
+sheet.hidden = true;
+document.body.append(sheet);
+
+async function openReport(catId, nStr) {
+  const n = Number(nStr);
+  const cat = await loadCategory(catId);
+  const q = cat.questions.find((x) => x.n === n);
+  const current = q.correct?.[0];
+  sheet.innerHTML = `<form class="sheet-card">
+    <div class="qnum">${esc(cat.title)} · № ${n}</div>
+    <p class="qtext">${esc(q.text)}</p>
+    <h3>${t('reportTitle')}</h3>
+    <div class="options">${q.options.map((o) => `
+      <label class="opt ${o.id === current ? 'selected' : ''}"><input type="radio" name="letter" value="${o.id}" ${o.id === current ? 'checked' : ''}>
+        <span class="letter">${o.id}</span><span>${esc(o.text)}</span></label>`).join('')}</div>
+    <textarea name="comment" rows="3" maxlength="1000" placeholder="${t('reportComment')}"></textarea>
+    <input name="name" maxlength="80" placeholder="${t('reportName')}" value="${esc(store.reporterName || '')}">
+    <div class="sheet-actions">
+      <button type="button" class="btn" data-close>${t('cancel')}</button>
+      <button class="btn primary" disabled>${t('send')}</button>
+    </div>
+  </form>`;
+  sheet.hidden = false;
+  document.body.style.overflow = 'hidden';
+  const form = sheet.querySelector('form');
+  const submit = form.querySelector('.btn.primary');
+  const field = (name) => form.elements.namedItem(name);
+  form.addEventListener('change', () => {
+    const letter = field('letter').value;
+    form.querySelectorAll('label.opt').forEach((l) => l.classList.toggle('selected', l.querySelector('input').checked));
+    submit.disabled = !letter || letter === current;
+  });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const letter = field('letter').value;
+    const official = (q.mine ? q.official : q.correct)?.[0] ?? null;
+    const k = statKey(catId, n);
+    if (letter === official) delete store.overrides[k];
+    else store.overrides[k] = letter;
+    store.reporterName = field('name').value.trim();
+    save();
+    closeReport();
+    render();
+    sendCorrection({
+      cat: catId, n, letter, current: official,
+      comment: field('comment').value.trim(), name: store.reporterName, clientId: store.clientId,
+    });
+  });
+}
+
+function closeReport() {
+  sheet.hidden = true;
+  sheet.innerHTML = '';
+  document.body.style.overflow = '';
+}
+sheet.addEventListener('click', (e) => {
+  if (e.target === sheet || e.target.closest('[data-close]')) closeReport();
+});
+
+async function postCorrection(c) {
+  const res = await fetch(`${FEEDBACK_URL}/api/suggestions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(c),
+  });
+  // 4xx other than rate limiting will never succeed, so don't keep retrying it
+  if (!res.ok && (res.status >= 500 || res.status === 429)) throw new Error(res.status);
+}
+
+async function sendCorrection(c) {
+  if (!FEEDBACK_URL) return toast(t('reportLocal'));
+  try {
+    await postCorrection(c);
+    toast(t('reportThanks'));
+  } catch {
+    store.outbox.push(c);
+    save();
+    toast(t('reportQueued'));
+  }
+}
+
+async function flushOutbox() {
+  if (!FEEDBACK_URL || !store.outbox.length) return;
+  const pending = store.outbox;
+  store.outbox = [];
+  for (const c of pending) {
+    try { await postCorrection(c); } catch { store.outbox.push(c); }
+  }
+  save();
+}
+window.addEventListener('online', flushOutbox);
+
+function toast(text) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = text;
+  document.body.append(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
 (async function init() {
   app.innerHTML = `<div class="empty">${t('loading')}</div>`;
   try {
@@ -542,6 +696,7 @@ window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); }
   // an unfinished test stays in the language it was started in
   if (store.test && !store.test.done && store.test.lang && index.languages[store.test.lang]) lang = store.test.lang;
   render();
+  flushOutbox();
 })();
 
 if ('serviceWorker' in navigator) {

@@ -1,0 +1,23 @@
+name = "medtests-feedback"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# where the app is hosted (CORS + question texts for the admin page)
+APP_ORIGIN = "https://denisstepurko.github.io"
+APP_URL = "https://denisstepurko.github.io/skuska-sposobilosti/"
+GITHUB_REPO = "DenisStepurko/skuska-sposobilosti"
+GITHUB_BRANCH = "main"
+# secrets (set with `npx wrangler secret put <NAME>`):
+#   ADMIN_TOKEN   password for the /admin page
+#   GITHUB_TOKEN  fine-grained token with Contents: read & write on GITHUB_REPO
+
+[[d1_databases]]
+binding = "DB"
+database_name = "medtests-feedback"
+database_id = "REPLACE_WITH_DATABASE_ID"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = false

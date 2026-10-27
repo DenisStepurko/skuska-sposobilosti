@@ -28,6 +28,7 @@ const I18N = {
     correct: 'Правильно',
     wrong: 'Неправильно',
     correctIs: (l) => `Правильна відповідь: ${l}`,
+    multiHint: 'Може бути кілька правильних відповідей.',
     answeredCount: (n, total) => `Відповіли: ${n} з ${total}`,
     noKey: 'Відповідь для цього питання ще не додана.',
     modeCheck: 'Самоперевірка',
@@ -65,7 +66,7 @@ const I18N = {
     testRules: (n, m, p) => `${n} питань, ${m} хвилин, прохідний бал ${p}%. Коли час вийде, тест завершиться автоматично.`,
     loadError: 'Не вдалося завантажити питання. Перевірте з’єднання з інтернетом.',
     report: 'Повідомити про помилку у відповіді',
-    reportTitle: 'Яка відповідь правильна?',
+    reportTitle: 'Які відповіді правильні? (можна кілька)',
     reportComment: 'Коментар (необов’язково): чому, звідки ця відповідь',
     reportName: 'Ваше ім’я (необов’язково)',
     send: 'Надіслати',
@@ -81,7 +82,7 @@ const I18N = {
 /* ---------- state ---------- */
 
 const store = loadStore();
-store.overrides ||= {}; // "cat:n" -> letter the user believes is correct
+store.overrides ||= {}; // "cat:n" -> letters the user believes are correct, e.g. "ad"
 store.outbox ||= []; // corrections not yet delivered to FEEDBACK_URL
 store.clientId ||= Math.random().toString(36).slice(2) + Date.now().toString(36);
 let lang = store.lang || 'uk';
@@ -129,12 +130,12 @@ function withOverrides(cat) {
     const k = statKey(cat.id, q.n);
     const mine = store.overrides[k];
     if (!mine) return q;
-    if (q.correct?.[0] === mine) {
+    if ((q.correct || []).join('') === mine) {
       delete store.overrides[k];
       changed = true;
       return q;
     }
-    return { ...q, correct: [mine], official: q.correct || [], mine: true };
+    return { ...q, correct: [...mine], official: q.correct || [], mine: true };
   });
   if (changed) save();
   return { ...cat, questions };
@@ -181,7 +182,7 @@ function optionsHtml(q, { selected = [], reveal = false, disabled = false }) {
 
 function fixHtml(catId, q) {
   const mine = q.mine
-    ? `<div class="hint">✎ ${t('myFix', q.correct[0], q.official.join(', ') || '—')} · <button class="linkbtn" data-undo="${catId}:${q.n}">${t('undoFix')}</button></div>`
+    ? `<div class="hint">✎ ${t('myFix', q.correct.join(', '), q.official.join(', ') || '—')} · <button class="linkbtn" data-undo="${catId}:${q.n}">${t('undoFix')}</button></div>`
     : '';
   return `${mine}<button class="linkbtn report" data-report="${catId}:${q.n}">⚑ ${t('report')}</button>`;
 }
@@ -295,6 +296,8 @@ function renderStudy() {
     } else if (study.revealed && !readMode) {
       const ok = sameSet(study.selected, q.correct);
       feedback = `<div class="verdict ${ok ? 'ok' : 'bad'}">${ok ? t('correct') : t('wrong')} · ${t('correctIs', q.correct.join(', '))}</div>`;
+    } else if (!readMode) {
+      feedback = `<div class="hint">${t('multiHint')}</div>`;
     }
     body = `
       <div class="qnum">№ ${q.n}</div>
@@ -392,7 +395,7 @@ async function renderTestRun() {
     `<div class="qnum">${esc(cat.title)} · № ${q.n}</div>
      <p class="qtext">${esc(q.text)}</p>
      ${optionsHtml(q, { selected: item.a })}
-     <div class="hint">${t('answeredCount', answered, test.items.length)}</div>
+     <div class="hint">${t('multiHint')} ${t('answeredCount', answered, test.items.length)}</div>
      <div class="grid">${test.items.map((x, k) =>
        `<button data-jump="${k}" class="${x.a.length ? 'done' : ''} ${k === test.i ? 'cur' : ''}">${k + 1}</button>`).join('')}</div>` +
     bottombar(`
@@ -508,7 +511,7 @@ app.addEventListener('click', async (e) => {
   // study
   if (route.startsWith('#/study/')) {
     if (opt && !study.revealed && store.studyMode !== 'read') {
-      study.selected = [opt];
+      study.selected = study.selected.includes(opt) ? study.selected.filter((x) => x !== opt) : [...study.selected, opt];
       return renderStudy();
     }
     if (act === 'scheck') {
@@ -530,7 +533,7 @@ app.addEventListener('click', async (e) => {
     const test = store.test;
     if (opt) {
       const item = test.items[test.i];
-      item.a = [opt];
+      item.a = item.a.includes(opt) ? item.a.filter((x) => x !== opt) : [...item.a, opt].sort();
       save();
       return renderTestRun();
     }
@@ -591,13 +594,13 @@ async function openReport(catId, nStr) {
   const n = Number(nStr);
   const cat = await loadCategory(catId);
   const q = cat.questions.find((x) => x.n === n);
-  const current = q.correct?.[0];
+  const current = (q.correct || []).join('');
   sheet.innerHTML = `<form class="sheet-card">
     <div class="qnum">${esc(cat.title)} · № ${n}</div>
     <p class="qtext">${esc(q.text)}</p>
     <h3>${t('reportTitle')}</h3>
     <div class="options">${q.options.map((o) => `
-      <label class="opt ${o.id === current ? 'selected' : ''}"><input type="radio" name="letter" value="${o.id}" ${o.id === current ? 'checked' : ''}>
+      <label class="opt ${current.includes(o.id) ? 'selected' : ''}"><input type="checkbox" name="letter" value="${o.id}" ${current.includes(o.id) ? 'checked' : ''}>
         <span class="letter">${o.id}</span><span>${esc(o.text)}</span></label>`).join('')}</div>
     <textarea name="comment" rows="3" maxlength="1000" placeholder="${t('reportComment')}"></textarea>
     <input name="name" maxlength="80" placeholder="${t('reportName')}" value="${esc(store.reporterName || '')}">
@@ -611,15 +614,16 @@ async function openReport(catId, nStr) {
   const form = sheet.querySelector('form');
   const submit = form.querySelector('.btn.primary');
   const field = (name) => form.elements.namedItem(name);
+  const letters = () => [...form.querySelectorAll('input[name=letter]:checked')].map((x) => x.value).sort().join('');
   form.addEventListener('change', () => {
-    const letter = field('letter').value;
+    const letter = letters();
     form.querySelectorAll('label.opt').forEach((l) => l.classList.toggle('selected', l.querySelector('input').checked));
     submit.disabled = !letter || letter === current;
   });
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const letter = field('letter').value;
-    const official = (q.mine ? q.official : q.correct)?.[0] ?? null;
+    const letter = letters();
+    const official = (q.mine ? q.official : q.correct || []).join('') || null;
     const k = statKey(catId, n);
     if (letter === official) delete store.overrides[k];
     else store.overrides[k] = letter;

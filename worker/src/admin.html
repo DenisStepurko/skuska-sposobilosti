@@ -17,9 +17,7 @@
   .q { font-weight:600; margin:4px 0 10px; }
   .opt { display:flex; gap:10px; padding:8px 10px; border-radius:10px; margin-bottom:6px; box-shadow:0 0 0 1px var(--line) inset; }
   .opt b { flex:none; width:18px; }
-  .opt .votes { margin-left:auto; flex:none; font-weight:700; color:var(--accent); }
   .opt.current { background:var(--ok-soft); box-shadow:0 0 0 2px var(--ok) inset; }
-  .opt.suggested { background:var(--sel-soft); }
   .comments { margin:10px 0; padding:0; list-style:none; }
   .comments li { padding:6px 0; border-top:1px solid var(--line); font-size:14px; }
   .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
@@ -48,6 +46,7 @@ try { token = localStorage.getItem('adminToken') || ''; } catch {}
 let tab = 'pending';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
 const cats = {};
+const fmt = (letters) => (letters ? [...letters].join(', ') : '—');
 
 async function api(path, body) {
   const res = await fetch(path, {
@@ -118,19 +117,20 @@ async function renderPending(list, rows) {
   for (const g of groups.values()) {
     const data = await category(g.cat);
     const q = data?.questions.find((x) => x.n === g.n);
-    const current = q?.correct?.[0];
+    const current = (q?.correct || []).join('');
     const votes = {};
     for (const r of g.items) votes[r.letter] = (votes[r.letter] || 0) + 1;
     const letters = Object.keys(votes).sort((a, b) => votes[b] - votes[a]);
     html.push(`<div class="card">
       <div class="muted">${esc(data?.title || `Категорія ${g.cat}`)} · № ${g.n} · поточна відповідь: <b>${esc(current || '—')}</b></div>
       <div class="q">${esc(q?.text || '')}</div>
-      ${(q?.options || []).map((o) => `<div class="opt ${o.id === current ? 'current' : ''} ${votes[o.id] ? 'suggested' : ''}">
-        <b>${o.id}</b><span>${esc(o.text)}</span>${votes[o.id] ? `<span class="votes">+${votes[o.id]}</span>` : ''}</div>`).join('')}
-      <ul class="comments">${g.items.map((r) => `<li><b>${esc(r.letter)}</b> · ${esc(r.name || 'анонім')} · <span class="muted">${new Date(r.created_at).toLocaleString('uk')}</span>${r.comment ? `<br>${esc(r.comment)}` : ''}</li>`).join('')}</ul>
+      ${(q?.options || []).map((o) => `<div class="opt ${current.includes(o.id) ? 'current' : ''}">
+        <b>${o.id}</b><span>${esc(o.text)}</span></div>`).join('')}
+      <div class="muted">Голоси: ${letters.map((l) => `<b>${fmt(l)}</b> — ${votes[l]}`).join(' · ')}</div>
+      <ul class="comments">${g.items.map((r) => `<li><b>${esc(fmt(r.letter))}</b> · ${esc(r.name || 'анонім')} · <span class="muted">${new Date(r.created_at).toLocaleString('uk')}</span>${r.comment ? `<br>${esc(r.comment)}` : ''}</li>`).join('')}</ul>
       <div class="actions">
-        ${letters.filter((l) => l !== current).map((l) => `<button class="accept" data-accept="${l}" data-cat="${g.cat}" data-n="${g.n}">Прийняти «${l}»</button>`).join('')}
-        <button class="reject" data-reject data-cat="${g.cat}" data-n="${g.n}">Відхилити — залишити «${esc(current || '—')}»</button>
+        ${letters.filter((l) => l !== current).map((l) => `<button class="accept" data-accept="${l}" data-cat="${g.cat}" data-n="${g.n}">Прийняти «${fmt(l)}»</button>`).join('')}
+        <button class="reject" data-reject data-cat="${g.cat}" data-n="${g.n}">Відхилити — залишити «${esc(fmt(current))}»</button>
       </div></div>`);
   }
   list.innerHTML = html.join('');
@@ -142,7 +142,7 @@ async function renderHistory(list, rows) {
     const data = await category(r.cat);
     html.push(`<div class="card">
       <span class="tag ${r.status}">${r.status === 'accepted' ? 'прийнято' : 'відхилено'}</span>
-      <span class="muted">${esc(data?.title || r.cat)} · № ${r.n} · запропоновано «${esc(r.letter)}» (було «${esc(r.current || '—')}») · ${esc(r.name || 'анонім')} · ${new Date(r.resolved_at).toLocaleString('uk')}</span>
+      <span class="muted">${esc(data?.title || r.cat)} · № ${r.n} · запропоновано «${esc(fmt(r.letter))}» (було «${esc(fmt(r.current))}») · ${esc(r.name || 'анонім')} · ${new Date(r.resolved_at).toLocaleString('uk')}</span>
       ${r.comment ? `<div>${esc(r.comment)}</div>` : ''}</div>`);
   }
   list.innerHTML = html.join('');
@@ -160,7 +160,7 @@ root.addEventListener('click', async (e) => {
   try {
     if (b.dataset.accept) await api('/api/admin/accept', { cat, n: Number(n), letter: b.dataset.accept });
     else await api('/api/admin/reject', { cat, n: Number(n) });
-    card.innerHTML = `<div class="muted">${b.dataset.accept ? `Прийнято «${b.dataset.accept}». Сайт оновиться за 1–2 хвилини.` : 'Відхилено.'}</div>`;
+    card.innerHTML = `<div class="muted">${b.dataset.accept ? `Прийнято «${fmt(b.dataset.accept)}». Сайт оновиться за 1–2 хвилини.` : 'Відхилено.'}</div>`;
   } catch (err) {
     card.querySelectorAll('button').forEach((x) => (x.disabled = false));
     alert(err.message);

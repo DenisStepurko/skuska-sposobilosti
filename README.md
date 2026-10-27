@@ -28,11 +28,11 @@ npm start            # http://localhost:8080
 ## Answers
 
 File `source/answers/<category number>.txt`, one line per question,
-exactly one correct letter:
+one or more correct letters:
 
 ```
 1. a
-2. b
+2. bd
 ```
 
 The current keys for all 8 categories are **unofficial**: they may contain mistakes.
@@ -45,7 +45,7 @@ a typo in the markers (for example "с)" or "в)" in Cyrillic).
 
 Settings are constants at the top of `public/app.js`:
 `TEST_SIZE` (60 questions), `TEST_MINUTES` (180 min), `PASS_PERCENT` (80%).
-Each question has exactly one correct option.
+A question may have several correct options; it counts as correct only if exactly those are chosen.
 When time runs out, the test finishes automatically (even if the app was closed).
 
 ## Progress

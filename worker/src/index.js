@@ -34,12 +34,12 @@ async function publicApi(req, env) {
   const body = await req.json().catch(() => ({}));
   const cat = String(body.cat ?? '');
   const n = Number(body.n);
-  const letter = String(body.letter ?? '').toLowerCase();
+  const letter = letterSet(body.letter);
   const clientId = String(body.clientId ?? '');
   const comment = String(body.comment ?? '').trim().slice(0, 1000);
   const name = String(body.name ?? '').trim().slice(0, 80);
-  const current = /^[a-e]$/.test(body.current) ? body.current : null;
-  if (!/^\d{1,2}$/.test(cat) || !Number.isInteger(n) || n < 1 || n > 1000 || !/^[a-e]$/.test(letter) || !/^[\w-]{8,64}$/.test(clientId)) {
+  const current = letterSet(body.current) || null;
+  if (!/^\d{1,2}$/.test(cat) || !Number.isInteger(n) || n < 1 || n > 1000 || !letter || !/^[\w-]{8,64}$/.test(clientId)) {
     return json({ error: 'invalid input' }, 400, headers);
   }
 
@@ -91,8 +91,8 @@ async function adminApi(req, env, url) {
   if (!/^\d{1,2}$/.test(cat) || !Number.isInteger(n)) return json({ error: 'invalid input' }, 400);
 
   if (route === 'accept') {
-    const letter = String(body.letter ?? '');
-    if (!/^[a-e]$/.test(letter)) return json({ error: 'invalid letter' }, 400);
+    const letter = letterSet(body.letter);
+    if (!letter) return json({ error: 'invalid letter' }, 400);
     const commit = await setAnswer(env, cat, n, letter);
     await env.DB.prepare(
       `UPDATE suggestions SET status = CASE WHEN letter = ? THEN 'accepted' ELSE 'rejected' END, resolved_at = ?
@@ -124,7 +124,7 @@ async function setAnswer(env, cat, n, letter) {
   const file = await res.json();
   const text = fromBase64(file.content);
 
-  const line = new RegExp(`^${n}\\s*[.):]?\\s*[a-e,\\s]*$`, 'm');
+  const line = new RegExp(`^${n}\\s*[.):]?\\s*[a-e, \\t]*$`, 'm');
   const updated = line.test(text)
     ? text.replace(line, `${n}. ${letter}`)
     : `${text.replace(/\n?$/, '\n')}${n}. ${letter}\n`;
@@ -148,6 +148,12 @@ async function setAnswer(env, cat, n, letter) {
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...headers } });
+}
+
+// "da" / "a, d" -> "ad"; empty string if anything but letters a–e
+function letterSet(v) {
+  const s = String(v ?? '').toLowerCase().replace(/[\s,]/g, '');
+  return /^[a-e]{1,5}$/.test(s) ? [...new Set(s)].sort().join('') : '';
 }
 
 function httpError(message, status) {

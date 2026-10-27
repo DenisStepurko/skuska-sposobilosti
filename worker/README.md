@@ -8,7 +8,7 @@ and comments, and clicks "Прийняти «x»" → the worker commits the new
 Until accepted, the person's correction only applies on their own device.
 
 ## API
-- `POST /api/suggestions` — `{cat, n, letter, current, comment, name, clientId}`; one vote per device per question, 40/hour per IP.
+- `POST /api/suggestions` — `{cat, n, letter, current, comment, name, clientId}` (`letter` = correct letters, e.g. `"ad"`); one vote per device per question, 40/hour per IP.
 - `GET /api/admin/suggestions?status=pending|done`, `POST /api/admin/accept {cat,n,letter}`, `POST /api/admin/reject {cat,n}` — `Authorization: Bearer <ADMIN_TOKEN>`.
 
 ## Deploy

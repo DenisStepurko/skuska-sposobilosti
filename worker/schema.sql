@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS suggestions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   cat TEXT NOT NULL,
   n INTEGER NOT NULL,
-  letter TEXT NOT NULL,
+  letter TEXT NOT NULL, -- correct letters, sorted, e.g. 'ad'
   current TEXT,
   comment TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL DEFAULT '',

@@ -167,8 +167,21 @@ function topbar(title, { back = '#/', meta = '', right = '' } = {}) {
   </div>`;
 }
 
-function optionsHtml(q, { selected = [], reveal = false, disabled = false }) {
-  return `<div class="options">${q.options.map((o) => {
+const LETTERS = ['a', 'b', 'c', 'd', 'e'];
+
+// Options like "all of the above" only make sense in their original place.
+const ANCHORED = /перелічен|перерахован|вищезазначен|наведен\S* вище|[ув]сі (відповіді|варіанти)/i;
+
+// Random display order of option ids; anchored options keep their position.
+function shuffledOrder(q) {
+  const free = shuffle(q.options.filter((o) => !ANCHORED.test(o.text)).map((o) => o.id));
+  return q.options.map((o) => (ANCHORED.test(o.text) ? o.id : free.pop()));
+}
+
+// `order` (option ids) shows the options shuffled and lettered by position on screen.
+function optionsHtml(q, { selected = [], reveal = false, disabled = false, order = null }) {
+  const options = order ? order.map((id) => q.options.find((o) => o.id === id)).filter(Boolean) : q.options;
+  return `<div class="options">${options.map((o, i) => {
     let cls = '';
     const isSel = selected.includes(o.id);
     if (reveal && hasKey(q)) {
@@ -176,7 +189,7 @@ function optionsHtml(q, { selected = [], reveal = false, disabled = false }) {
       else if (isSel) cls = 'wrong';
     } else if (isSel) cls = 'selected';
     return `<button class="opt ${cls}" data-opt="${o.id}" ${disabled ? 'disabled' : ''}>
-      <span class="letter">${o.id}</span><span>${esc(o.text)}</span></button>`;
+      <span class="letter">${order ? LETTERS[i] : o.id}</span><span>${esc(o.text)}</span></button>`;
   }).join('')}</div>`;
 }
 
@@ -356,7 +369,7 @@ async function startTest() {
   const pool = [];
   for (const id of ids) {
     const cat = await loadCategory(id);
-    for (const q of cat.questions) if (hasKey(q)) pool.push({ c: id, n: q.n });
+    for (const q of cat.questions) if (hasKey(q)) pool.push({ c: id, n: q.n, o: shuffledOrder(q) });
   }
   store.test = { lang, items: shuffle(pool).slice(0, TEST_SIZE).map((x) => ({ ...x, a: [] })), i: 0, started: Date.now(), done: false };
   save();
@@ -394,7 +407,7 @@ async function renderTestRun() {
     }) +
     `<div class="qnum">${esc(cat.title)} · № ${q.n}</div>
      <p class="qtext">${esc(q.text)}</p>
-     ${optionsHtml(q, { selected: item.a })}
+     ${optionsHtml(q, { selected: item.a, order: item.o })}
      <div class="hint">${t('multiHint')} ${t('answeredCount', answered, test.items.length)}</div>
      <div class="grid">${test.items.map((x, k) =>
        `<button data-jump="${k}" class="${x.a.length ? 'done' : ''} ${k === test.i ? 'cur' : ''}">${k + 1}</button>`).join('')}</div>` +
